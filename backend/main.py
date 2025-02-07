@@ -19,10 +19,11 @@ app = Flask(__name__)
 
 # CORS ayarlarını güncelle
 CORS(app, 
-     resources={r"/*": {"origins": ["http://localhost:3000", "https://your-frontend-url.vercel.app"]}},
-     supports_credentials=True,
+     resources={r"/*": {"origins": ["http://localhost:3000", "https://kitap-market.vercel.app"]}},
+     supports_credentials=False,
      allow_headers=["Content-Type", "Authorization"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     expose_headers=["Content-Type", "Authorization"])
 
 # Hata yakalama
 @app.errorhandler(Exception)
@@ -77,13 +78,12 @@ except Exception as e:
 
 db = SQLAlchemy(app)
 
-# Mail ayarları - Yandex Mail için
-app.config['MAIL_SERVER'] = 'smtp.yandex.com'
-app.config['MAIL_PORT'] = 465
-app.config['MAIL_USE_TLS'] = False
-app.config['MAIL_USE_SSL'] = True
-app.config['MAIL_USERNAME'] = 'your-new-email@yandex.com'  # Yandex mail adresiniz
-app.config['MAIL_PASSWORD'] = 'your-yandex-password'       # Yandex şifreniz
+# Mail ayarları
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.yandex.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 465))
+app.config['MAIL_USE_SSL'] = os.environ.get('MAIL_USE_SSL', 'True').lower() == 'true'
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 mail = Mail(app)
 
 def allowed_file(filename):
