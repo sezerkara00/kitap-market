@@ -148,15 +148,15 @@ class User(db.Model):
     password = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), default='user')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    username = db.Column(db.String(50), unique=True, nullable=False)  # Kullanıcı adı
+    username = db.Column(db.String(50), unique=True, nullable=True)  # nullable=True yaptık
     google_id = db.Column(db.String(100), unique=True, nullable=True)
     balance = db.Column(db.Float, default=0.0)
     avatar = db.Column(db.String(200), nullable=True)
 
     def __init__(self, **kwargs):
         super(User, self).__init__(**kwargs)
-        if not self.username:  # Eğer username verilmemişse
-            base = self.name.lower().replace(' ', '') if self.name else self.email.split('@')[0]
+        if not self.username:
+            base = self.email.split('@')[0]
             username = base
             counter = 1
             while User.query.filter_by(username=username).first():
