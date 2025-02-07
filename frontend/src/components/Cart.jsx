@@ -14,18 +14,25 @@ import {
   IconButton,
   Card,
   CardMedia,
-  TextField
+  TextField,
+  Grid,
+  Link,
+  Divider,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
-import axios from 'axios';
+import axios from '../utils/axiosConfig';
 import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 
 const Cart = () => {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
     fetchCart();
@@ -33,10 +40,7 @@ const Cart = () => {
 
   const fetchCart = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/api/cart', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await axios.get('/api/cart');
       setCartItems(response.data);
       setLoading(false);
     } catch (error) {
@@ -49,11 +53,9 @@ const Cart = () => {
     if (newQuantity < 1) return;
     
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`http://localhost:5000/api/cart/${itemId}`, 
-        { quantity: newQuantity },
-        { headers: { Authorization: `Bearer ${token}` }}
-      );
+      await axios.put(`/api/cart/${itemId}`, { 
+        quantity: newQuantity 
+      });
       fetchCart();
     } catch (error) {
       console.error('Miktar güncellenemedi:', error);
@@ -62,10 +64,7 @@ const Cart = () => {
 
   const removeFromCart = async (itemId) => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/api/cart/${itemId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.delete(`/api/cart/${itemId}`);
       fetchCart();
     } catch (error) {
       console.error('Ürün sepetten silinemedi:', error);
@@ -74,14 +73,15 @@ const Cart = () => {
 
   const handleCheckout = async () => {
     try {
-      const token = localStorage.getItem('token');
-      await axios.post('http://localhost:5000/api/orders', {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.post('/api/orders');
       navigate('/orders');
     } catch (error) {
       console.error('Sipariş oluşturulamadı:', error);
-      alert('Sipariş oluşturulurken bir hata oluştu');
+      setSnackbar({
+        open: true,
+        message: 'Sipariş oluşturulurken bir hata oluştu',
+        severity: 'error'
+      });
     }
   };
 
@@ -103,10 +103,10 @@ const Cart = () => {
         <Paper sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="h6">Sepetiniz boş</Typography>
           <Button 
+            component={RouterLink} 
+            to="/books" 
             variant="contained" 
-            color="primary" 
             sx={{ mt: 2 }}
-            onClick={() => navigate('/books')}
           >
             Alışverişe Başla
           </Button>
@@ -118,105 +118,156 @@ const Cart = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
       <Typography variant="h4" gutterBottom>
-        Sepetim
+        Sepetim ({cartItems.length} ürün)
       </Typography>
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Ürün</TableCell>
-              <TableCell align="right">Fiyat</TableCell>
-              <TableCell align="center">Adet</TableCell>
-              <TableCell align="right">Toplam</TableCell>
-              <TableCell align="center">İşlem</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {cartItems.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Card sx={{ width: 60, height: 80, flexShrink: 0 }}>
-                      <CardMedia
-                        component="img"
-                        height="80"
-                        image={item.book.image_url || '/placeholder.png'}
-                        alt={item.book.title}
-                      />
-                    </Card>
-                    <Typography>{item.book.title}</Typography>
+      {cartItems.length === 0 ? (
+        <Paper sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="h6" gutterBottom>
+            Sepetiniz boş
+          </Typography>
+          <Button 
+            component={RouterLink} 
+            to="/books" 
+            variant="contained" 
+            sx={{ mt: 2 }}
+          >
+            Alışverişe Başla
+          </Button>
+        </Paper>
+      ) : (
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
+            <Paper sx={{ p: 2 }}>
+              {cartItems.map((item) => (
+                <Box 
+                  key={item.id} 
+                  sx={{ 
+                    display: 'flex', 
+                    mb: 2,
+                    p: 2,
+                    borderRadius: 1,
+                    bgcolor: 'background.default'
+                  }}
+                >
+                  <Box 
+                    component="img"
+                    src={item.book.image_url ? `http://localhost:5000${item.book.image_url}` : '/placeholder.jpg'}
+                    alt={item.book.title}
+                    sx={{ 
+                      width: 100, 
+                      height: 140, 
+                      objectFit: 'cover',
+                      borderRadius: 1,
+                      mr: 2 
+                    }}
+                  />
+                  <Box sx={{ flex: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Link
+                        component={RouterLink}
+                        to={`/book/${item.book.id}`}
+                        color="inherit"
+                        underline="hover"
+                      >
+                        <Typography variant="h6">
+                          {item.book.title}
+                        </Typography>
+                      </Link>
+                      <IconButton 
+                        onClick={() => removeFromCart(item.id)}
+                        size="small"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {item.book.author}
+                    </Typography>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      mt: 2 
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <IconButton 
+                          size="small"
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          disabled={item.quantity <= 1}
+                        >
+                          <RemoveIcon />
+                        </IconButton>
+                        <Typography sx={{ mx: 2 }}>
+                          {item.quantity}
+                        </Typography>
+                        <IconButton 
+                          size="small"
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        >
+                          <AddIcon />
+                        </IconButton>
+                      </Box>
+                      <Typography variant="h6" color="primary">
+                        {(item.book.price * item.quantity).toFixed(2)} TL
+                      </Typography>
+                    </Box>
                   </Box>
-                </TableCell>
-                <TableCell align="right">
-                  {item.book.price.toFixed(2)} TL
-                </TableCell>
-                <TableCell align="center">
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <IconButton 
-                      size="small"
-                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                    >
-                      <RemoveIcon />
-                    </IconButton>
-                    <TextField
-                      size="small"
-                      value={item.quantity}
-                      onChange={(e) => {
-                        const value = parseInt(e.target.value);
-                        if (!isNaN(value)) {
-                          updateQuantity(item.id, value);
-                        }
-                      }}
-                      sx={{ width: 60, mx: 1 }}
-                      inputProps={{ style: { textAlign: 'center' } }}
-                    />
-                    <IconButton 
-                      size="small"
-                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                    >
-                      <AddIcon />
-                    </IconButton>
-                  </Box>
-                </TableCell>
-                <TableCell align="right">
-                  {(item.book.price * item.quantity).toFixed(2)} TL
-                </TableCell>
-                <TableCell align="center">
-                  <IconButton 
-                    color="error"
-                    onClick={() => removeFromCart(item.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-            <TableRow>
-              <TableCell colSpan={3} align="right">
-                <Typography variant="h6">Toplam:</Typography>
-              </TableCell>
-              <TableCell align="right">
-                <Typography variant="h6">
-                  {calculateTotal().toFixed(2)} TL
-                </Typography>
-              </TableCell>
-              <TableCell />
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
+                </Box>
+              ))}
+            </Paper>
+          </Grid>
 
-      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button
-          variant="contained"
-          color="primary"
-          size="large"
-          onClick={handleCheckout}
+          {/* Sağ taraftaki özet kartı */}
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ p: 2, position: 'sticky', top: 20 }}>
+              <Typography variant="h6" gutterBottom>
+                Sipariş Özeti
+              </Typography>
+              <Box sx={{ my: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography>Ürünler Toplamı</Typography>
+                  <Typography>{calculateTotal().toFixed(2)} TL</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography>Kargo</Typography>
+                  <Typography>Ücretsiz</Typography>
+                </Box>
+                <Divider sx={{ my: 1 }} />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="h6">Toplam</Typography>
+                  <Typography variant="h6" color="primary">
+                    {calculateTotal().toFixed(2)} TL
+                  </Typography>
+                </Box>
+              </Box>
+              <Button 
+                variant="contained" 
+                fullWidth 
+                onClick={handleCheckout}
+                disabled={loading}
+              >
+                {loading ? 'İşleniyor...' : 'Ödemeye Geç'}
+              </Button>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))} 
+          severity={snackbar.severity}
+          variant="filled"
         >
-          Siparişi Tamamla
-        </Button>
-      </Box>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

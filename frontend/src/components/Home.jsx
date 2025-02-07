@@ -28,6 +28,11 @@ const Home = () => {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
 
   useEffect(() => {
     fetchBooks();
@@ -44,12 +49,39 @@ const Home = () => {
     }
   };
 
-  const handleAddToCart = async (bookId, e) => {
-    e.stopPropagation();
+  const handleAddToCart = async (bookId) => {
     try {
-      await axios.post('/api/cart/add', { book_id: bookId, quantity: 1 });
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      const response = await axios.post('/api/cart', {
+        book_id: parseInt(bookId),
+        quantity: 1
+      });
+
+      if (response.data) {
+        setSnackbar({
+          open: true,
+          message: 'Kitap sepete eklendi',
+          severity: 'success'
+        });
+      }
     } catch (error) {
       console.error('Sepete eklenemedi:', error);
+      
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Sepete eklenirken bir hata oluştu',
+        severity: 'error'
+      });
+
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+      }
     }
   };
 
@@ -129,13 +161,27 @@ const Home = () => {
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
-                    transition: 'transform 0.2s',
+                    position: 'relative',
+                    cursor: 'pointer',
                     '&:hover': {
-                      transform: 'translateY(-5px)',
                       boxShadow: 6
                     }
                   }}
-                  onClick={() => navigate(`/books/${book.id}`)}
+                  onClick={() => {
+                    console.log('Navigating to book:', book.id);
+                    const slug = book.title
+                      .toLowerCase()
+                      .replace(/[ğ]/g, 'g')
+                      .replace(/[ü]/g, 'u')
+                      .replace(/[ş]/g, 's')
+                      .replace(/[ı]/g, 'i')
+                      .replace(/[ö]/g, 'o')
+                      .replace(/[ç]/g, 'c')
+                      .replace(/[^a-z0-9]/g, '-')
+                      .replace(/-+/g, '-')
+                      .replace(/^-|-$/g, '');
+                    navigate(`/book/${slug}/${book.id}`);
+                  }}
                 >
                   <CardMedia
                     component="img"
@@ -173,7 +219,7 @@ const Home = () => {
                       </Typography>
                       <IconButton
                         color="primary"
-                        onClick={(e) => handleAddToCart(book.id, e)}
+                        onClick={() => handleAddToCart(book.id)}
                         disabled={book.stock <= 0}
                       >
                         <CartIcon />

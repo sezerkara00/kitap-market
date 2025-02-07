@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Button, Box, Badge } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, Box, Badge, Avatar } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
@@ -117,6 +117,16 @@ const Navbar = () => {
                   <Button color="inherit" component={Link} to="/orders">
                     Siparişlerim
                   </Button>
+                  {user && (
+                    <Button 
+                      color="inherit" 
+                      component={Link} 
+                      to="/profile"
+                      startIcon={<Avatar src={user.avatar} sx={{ width: 24, height: 24 }} />}
+                    >
+                      Profilim
+                    </Button>
+                  )}
                 </>
               )}
               <Button color="inherit" onClick={handleLogout}>

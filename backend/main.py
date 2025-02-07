@@ -13,12 +13,13 @@ from flask_mail import Mail, Message
 import secrets
 from functools import wraps
 from sqlalchemy.sql import func
+import time
 
 app = Flask(__name__)
 
-# CORS ayarlarını basitleştir
+# CORS ayarlarını güncelle
 CORS(app, 
-     resources={r"/*": {"origins": "http://localhost:3000"}},
+     resources={r"/*": {"origins": ["http://localhost:3000", "https://your-frontend-url.vercel.app"]}},
      supports_credentials=True,
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -40,7 +41,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'upload
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bookstore.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///bookstore.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # max 16MB
 
@@ -137,14 +138,14 @@ class OrderItem(db.Model):
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    username = db.Column(db.String(50), unique=True, nullable=False)
+    username = db.Column(db.String(50), unique=True, nullable=False)  # Kullanıcı adı
     password = db.Column(db.String(200), nullable=True)
-    name = db.Column(db.String(100))
+    name = db.Column(db.String(100))  # Ad Soyad
     google_id = db.Column(db.String(100), unique=True, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     role = db.Column(db.String(20), default='user')
     balance = db.Column(db.Float, default=0.0)
-    avatar = db.Column(db.String(200), nullable=True)  # Avatar kolonu ekle
+    avatar = db.Column(db.String(200), nullable=True)
 
     def __init__(self, **kwargs):
         super(User, self).__init__(**kwargs)
@@ -215,7 +216,6 @@ def home():
 def get_publishers():
     try:
         publishers = Publisher.query.all()
-        print("Yayınevleri:", publishers)  # Backend'de veriyi kontrol et
         return jsonify([{
             'id': pub.id,
             'name': pub.name,
@@ -223,7 +223,7 @@ def get_publishers():
             'book_count': len(pub.books)
         } for pub in publishers])
     except Exception as e:
-        print("Hata:", str(e))  # Hata varsa görelim
+        print("Yayınevleri listelenemedi:", str(e))
         return jsonify({"error": str(e)}), 500
 
 # Yayınevi ekle (admin için)
@@ -773,12 +773,14 @@ def update_cart_item(item_id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-# Kitap detaylarını getir - image_url'yi tam URL olarak döndür
+# Kitap detaylarını getir
 @app.route('/api/books/<int:id>', methods=['GET'])
 def get_book(id):
     try:
+        print(f"Getting book details for ID: {id}")  # Debug log
         book = Book.query.get_or_404(id)
-        return jsonify({
+        
+        response_data = {
             'id': book.id,
             'title': book.title,
             'author': book.author,
@@ -787,12 +789,21 @@ def get_book(id):
             'image_url': f'http://localhost:5000/uploads/{book.image_url}' if book.image_url else None,
             'description': book.description,
             'category': book.category,
+            'publisher': {
+                'id': book.publisher.id if book.publisher else None,
+                'name': book.publisher.name if book.publisher else None
+            },
             'seller': {
-                'id': book.seller_id,
+                'id': book.seller.id,
                 'name': book.seller.name
             }
-        })
+        }
+        
+        print("Response data:", response_data)  # Debug log
+        return jsonify(response_data)
+        
     except Exception as e:
+        print("Error getting book details:", str(e))  # Debug log
         return jsonify({"error": str(e)}), 500
 
 # Kitap güncelleme endpoint'i
@@ -838,16 +849,12 @@ def admin_get_books():
             'price': book.price,
             'stock': book.stock,
             'category': book.category,
-            'seller': {
-                'id': book.seller.id,
-                'name': book.seller.name,
-                'username': book.seller.username
-            },
+            'publisher_id': book.publisher_id,
             'publisher': {
                 'id': book.publisher.id if book.publisher else None,
                 'name': book.publisher.name if book.publisher else None
-            },
-            'image_url': f'http://localhost:5000/uploads/{book.image_url}' if book.image_url else None
+            } if book.publisher else None,
+            'image_url': book.image_url
         } for book in books])
     except Exception as e:
         print("Admin kitap listeleme hatası:", str(e))
@@ -912,16 +919,13 @@ def get_user_info():
         user = User.query.get(user_id)
         return jsonify({
             'id': user.id,
-            'name': user.name,
             'email': user.email,
             'username': user.username,
+            'name': user.name,
             'balance': user.balance,
-            'book_count': len(user.books),
-            'order_count': len(user.orders),
-            'avatar': f'http://localhost:5000/uploads/{user.avatar}' if user.avatar else None
+            'avatar': f'/uploads/{user.avatar}' if user.avatar else None
         })
     except Exception as e:
-        print("Kullanıcı bilgileri getirme hatası:", str(e))
         return jsonify({"error": str(e)}), 500
 
 # Profil güncelleme endpoint'i
@@ -950,7 +954,7 @@ def update_profile():
                 "email": user.email,
                 "username": user.username,
                 "name": user.name,
-                "avatar": f'http://localhost:5000/uploads/{user.avatar}' if user.avatar else None
+                "avatar": f'/uploads/{user.avatar}' if user.avatar else None
             }
         })
         
@@ -986,7 +990,7 @@ def user_lookup_callback(_jwt_header, jwt_data):
     except (ValueError, TypeError):
         return None
 
-# Profil resmi yükleme endpoint'i
+# Avatar yükleme endpoint'i
 @app.route('/api/user/avatar', methods=['POST'])
 @jwt_required()
 def upload_avatar():
@@ -998,39 +1002,32 @@ def upload_avatar():
         if file.filename == '':
             return jsonify({"error": "Dosya seçilmedi"}), 400
             
-        if not allowed_file(file.filename):
-            return jsonify({"error": "Geçersiz dosya türü"}), 400
-
-        # Güvenli dosya adı oluştur
-        filename = secure_filename(file.filename)
-        # Benzersiz dosya adı oluştur
-        unique_filename = f"avatar_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{filename}"
-        
-        # Dosyayı kaydet
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-        file.save(file_path)
-        
-        # Kullanıcının avatar'ını güncelle
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        
-        # Eski avatar'ı sil (varsa)
-        if user.avatar:
-            old_avatar_path = os.path.join(app.config['UPLOAD_FOLDER'], os.path.basename(user.avatar))
-            if os.path.exists(old_avatar_path):
-                os.remove(old_avatar_path)
-        
-        # Yeni avatar URL'ini kaydet
-        user.avatar = unique_filename
-        db.session.commit()
-        
-        return jsonify({
-            "message": "Profil resmi güncellendi",
-            "avatar_url": f'http://localhost:5000/uploads/{unique_filename}'
-        })
-        
+        if file:
+            # Güvenli dosya adı oluştur
+            filename = secure_filename(file.filename)
+            # Benzersiz dosya adı oluştur
+            unique_filename = f"avatar_{get_jwt_identity()}_{int(time.time())}_{filename}"
+            
+            # Dosyayı kaydet
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+            file.save(file_path)
+            
+            # Kullanıcının avatar'ını güncelle
+            user = User.query.get(get_jwt_identity())
+            
+            # Eski avatar'ı sil
+            if user.avatar and os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], user.avatar)):
+                os.remove(os.path.join(app.config['UPLOAD_FOLDER'], user.avatar))
+            
+            user.avatar = unique_filename
+            db.session.commit()
+            
+            return jsonify({
+                "message": "Avatar güncellendi",
+                "avatar_url": f"/uploads/{unique_filename}"
+            })
+            
     except Exception as e:
-        db.session.rollback()
         print("Avatar yükleme hatası:", str(e))
         return jsonify({"error": str(e)}), 500
 
@@ -1124,41 +1121,335 @@ BOOK_CATEGORIES = [
 def get_categories():
     return jsonify(BOOK_CATEGORIES)
 
+# Yorum modeli
+class Review(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    book_id = db.Column(db.Integer, db.ForeignKey('book.id'), nullable=False)
+    rating = db.Column(db.Integer, nullable=False)  # 1-5 arası puan
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', backref='reviews')
+    book = db.relationship('Book', backref='reviews')
+
+# İstek listesi modeli
+class Wishlist(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    book_id = db.Column(db.Integer, db.ForeignKey('book.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', backref='wishlist_items')
+    book = db.relationship('Book', backref='wishlist_items')
+
+# Yorum ekle/güncelle
+@app.route('/api/books/<int:book_id>/reviews', methods=['POST'])
+@jwt_required()
+def add_review(book_id):
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        # Mevcut yorumu kontrol et
+        review = Review.query.filter_by(user_id=user_id, book_id=book_id).first()
+        
+        if review:
+            # Yorumu güncelle
+            review.rating = data['rating']
+            review.comment = data['comment']
+        else:
+            # Yeni yorum ekle
+            review = Review(
+                user_id=user_id,
+                book_id=book_id,
+                rating=data['rating'],
+                comment=data['comment']
+            )
+            db.session.add(review)
+            
+        db.session.commit()
+        return jsonify({"message": "Yorum başarıyla eklendi"})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# Kitabın yorumlarını getir
+@app.route('/api/books/<int:book_id>/reviews', methods=['GET'])
+def get_reviews(book_id):
+    try:
+        reviews = Review.query.filter_by(book_id=book_id).all()
+        return jsonify([{
+            'id': review.id,
+            'user': {
+                'id': review.user.id,
+                'username': review.user.username,
+                'avatar': review.user.avatar
+            },
+            'rating': review.rating,
+            'comment': review.comment,
+            'created_at': review.created_at
+        } for review in reviews])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# İstek listesine ekle/çıkar
+@app.route('/api/wishlist/<int:book_id>', methods=['POST'])
+@jwt_required()
+def toggle_wishlist(book_id):
+    try:
+        user_id = get_jwt_identity()
+        wishlist_item = Wishlist.query.filter_by(
+            user_id=user_id, 
+            book_id=book_id
+        ).first()
+        
+        if wishlist_item:
+            # İstek listesinden çıkar
+            db.session.delete(wishlist_item)
+            message = "Kitap istek listesinden çıkarıldı"
+        else:
+            # İstek listesine ekle
+            wishlist_item = Wishlist(user_id=user_id, book_id=book_id)
+            db.session.add(wishlist_item)
+            message = "Kitap istek listesine eklendi"
+            
+        db.session.commit()
+        return jsonify({"message": message})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# İstek listesini getir
+@app.route('/api/wishlist', methods=['GET'])
+@jwt_required()
+def get_wishlist():
+    try:
+        user_id = get_jwt_identity()
+        wishlist = Wishlist.query.filter_by(user_id=user_id).all()
+        return jsonify([{
+            'id': item.id,
+            'book': {
+                'id': item.book.id,
+                'title': item.book.title,
+                'author': item.book.author,
+                'price': item.book.price,
+                'image_url': f'/uploads/{item.book.image_url}' if item.book.image_url else None
+            }
+        } for item in wishlist])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Yayınevi silme endpoint'i
+@app.route('/api/publishers/<int:publisher_id>', methods=['DELETE'])
+@jwt_required()
+@admin_required()
+def delete_publisher(publisher_id):
+    try:
+        publisher = Publisher.query.get_or_404(publisher_id)
+        db.session.delete(publisher)
+        db.session.commit()
+        return jsonify({"message": "Yayınevi başarıyla silindi"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# Yayınevi güncelleme endpoint'i
+@app.route('/api/publishers/<int:publisher_id>', methods=['PUT'])
+@jwt_required()
+@admin_required()
+def update_publisher(publisher_id):
+    try:
+        publisher = Publisher.query.get_or_404(publisher_id)
+        data = request.get_json()
+        
+        publisher.name = data.get('name', publisher.name)
+        publisher.description = data.get('description', publisher.description)
+        
+        db.session.commit()
+        return jsonify({
+            'id': publisher.id,
+            'name': publisher.name,
+            'description': publisher.description
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# Kategori ekleme endpoint'i
+@app.route('/api/categories', methods=['POST'])
+@jwt_required()
+@admin_required()
+def add_category():
+    try:
+        data = request.get_json()
+        category_name = data.get('name')
+        
+        if category_name not in BOOK_CATEGORIES:
+            BOOK_CATEGORIES.append(category_name)
+            return jsonify({"message": "Kategori başarıyla eklendi"})
+        return jsonify({"error": "Bu kategori zaten mevcut"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Kategori silme endpoint'i
+@app.route('/api/categories/<string:category_name>', methods=['DELETE'])
+@jwt_required()
+@admin_required()
+def delete_category(category_name):
+    try:
+        if category_name in BOOK_CATEGORIES:
+            BOOK_CATEGORIES.remove(category_name)
+            return jsonify({"message": "Kategori başarıyla silindi"})
+        return jsonify({"error": "Kategori bulunamadı"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Kategori güncelleme endpoint'i
+@app.route('/api/categories/<string:old_name>', methods=['PUT'])
+@jwt_required()
+@admin_required()
+def update_category(old_name):
+    try:
+        data = request.get_json()
+        new_name = data.get('name')
+        
+        if old_name in BOOK_CATEGORIES:
+            index = BOOK_CATEGORIES.index(old_name)
+            BOOK_CATEGORIES[index] = new_name
+            return jsonify({"message": "Kategori başarıyla güncellendi"})
+        return jsonify({"error": "Kategori bulunamadı"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Kullanıcının yorumlarını getir
+@app.route('/api/user/reviews', methods=['GET'])
+@jwt_required()
+def get_user_reviews():
+    try:
+        user_id = get_jwt_identity()
+        reviews = Review.query.filter_by(user_id=user_id).all()
+        return jsonify([{
+            'id': review.id,
+            'book': {
+                'id': review.book.id,
+                'title': review.book.title,
+                'author': review.book.author,
+                'image_url': review.book.image_url
+            },
+            'rating': review.rating,
+            'comment': review.comment,
+            'created_at': review.created_at
+        } for review in reviews])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Yorum silme endpoint'i
+@app.route('/api/reviews/<int:review_id>', methods=['DELETE'])
+@jwt_required()
+def delete_review(review_id):
+    try:
+        user_id = get_jwt_identity()
+        review = Review.query.get_or_404(review_id)
+        
+        if review.user_id != user_id:
+            return jsonify({"error": "Bu yorumu silme yetkiniz yok"}), 403
+            
+        db.session.delete(review)
+        db.session.commit()
+        return jsonify({"message": "Yorum başarıyla silindi"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     with app.app_context():
-        # Veritabanını sil ve yeniden oluştur
-        db.drop_all()
+        # Veritabanını sadece ilk kez oluştur
         db.create_all()
         
-        # Admin kullanıcısı oluştur
-        admin = User(
-            email='admin@admin.com',
-            username='admin',
-            password=generate_password_hash('admin123'),
-            name='Admin',
-            role='admin',
-            balance=0.0,
-            avatar=None
-        )
-        db.session.add(admin)
+        # Admin kullanıcısı yoksa oluştur
+        admin = User.query.filter_by(email='admin@admin.com').first()
+        if not admin:
+            admin = User(
+                email='admin@admin.com',
+                username='admin',
+                password=generate_password_hash('admin123'),
+                name='Admin',
+                role='admin',
+                balance=0.0,
+                avatar=None
+            )
+            db.session.add(admin)
 
-        # Örnek yayınevleri ekle
-        publishers = [
-            Publisher(name='Can Yayınları', description='Can Yayınları açıklaması'),
-            Publisher(name='Yapı Kredi Yayınları', description='YKY açıklaması'),
-            Publisher(name='İletişim Yayınları', description='İletişim açıklaması'),
-            Publisher(name='İş Bankası Kültür Yayınları', description='İş Bankası açıklaması'),
-            Publisher(name='Doğan Kitap', description='Doğan Kitap açıklaması'),
-            Publisher(name='Remzi Kitabevi', description='Remzi Kitabevi açıklaması'),
-            Publisher(name='Alfa Yayınları', description='Alfa Yayınları açıklaması'),
-            Publisher(name='Pegasus Yayınları', description='Pegasus Yayınları açıklaması')
-        ]
-        
-        for publisher in publishers:
-            db.session.add(publisher)
+            # Örnek yayınevleri ekle
+            publishers = [
+                Publisher(name='Can Yayınları', description='Can Yayınları açıklaması'),
+                Publisher(name='Yapı Kredi Yayınları', description='YKY açıklaması'),
+                Publisher(name='İletişim Yayınları', description='İletişim açıklaması'),
+                Publisher(name='İş Bankası Kültür Yayınları', description='İş Bankası açıklaması'),
+                Publisher(name='Doğan Kitap', description='Doğan Kitap açıklaması'),
+                Publisher(name='Remzi Kitabevi', description='Remzi Kitabevi açıklaması'),
+                Publisher(name='Alfa Yayınları', description='Alfa Yayınları açıklaması'),
+                Publisher(name='Pegasus Yayınları', description='Pegasus Yayınları açıklaması')
+            ]
+            
+            for publisher in publishers:
+                db.session.add(publisher)
 
-        db.session.commit()
-        print("Admin kullanıcısı ve örnek yayınevleri oluşturuldu!")
-        print("Veritabanı hazır!")
+            # Örnek kitaplar ekle
+            books = [
+                {
+                    'title': '1984',
+                    'author': 'George Orwell',
+                    'price': 45.0,
+                    'stock': 100,
+                    'description': 'Distopik bir klasik',
+                    'category': 'Roman',
+                    'publisher_id': 1
+                },
+                {
+                    'title': 'Suç ve Ceza',
+                    'author': 'Fyodor Dostoyevski',
+                    'price': 55.0,
+                    'stock': 75,
+                    'description': 'Psikolojik bir başyapıt',
+                    'category': 'Roman',
+                    'publisher_id': 2
+                },
+                {
+                    'title': 'Küçük Prens',
+                    'author': 'Antoine de Saint-Exupéry',
+                    'price': 25.0,
+                    'stock': 150,
+                    'description': 'Her yaştan okuyucu için',
+                    'category': 'Çocuk Kitapları',
+                    'publisher_id': 3
+                },
+                {
+                    'title': 'Nutuk',
+                    'author': 'Mustafa Kemal Atatürk',
+                    'price': 65.0,
+                    'stock': 200,
+                    'description': 'Türkiye Cumhuriyeti\'nin kuruluş öyküsü',
+                    'category': 'Tarih',
+                    'publisher_id': 4
+                }
+            ]
+
+            for book_data in books:
+                book = Book(**book_data)
+                db.session.add(book)
+
+            try:
+                db.session.commit()
+                print("Veritabanı başarıyla oluşturuldu!")
+                print("Admin kullanıcısı ve örnek veriler eklendi!")
+            except Exception as e:
+                db.session.rollback()
+                print("Hata:", str(e))
+        else:
+            print("Veritabanı zaten mevcut!")
         
-    app.run(debug=True)
+    # Port ayarını Heroku'dan al
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)

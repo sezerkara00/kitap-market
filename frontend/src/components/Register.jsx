@@ -8,16 +8,19 @@ import {
   Box 
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../utils/axiosConfig';
 
 const Register = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
     email: '',
     password: '',
     confirmPassword: ''
   });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -28,23 +31,35 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    setLoading(true);
+    setError('');
+
     if (formData.password !== formData.confirmPassword) {
-      alert('Şifreler eşleşmiyor');
+      setError('Şifreler eşleşmiyor');
+      setLoading(false);
       return;
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/register', {
+      const response = await axios.post('/api/auth/register', {
         name: formData.name,
+        username: formData.username,
         email: formData.email,
         password: formData.password
       });
-      
-      alert('Kayıt başarılı! Lütfen email adresinizi doğrulayın. Spam klasörünü kontrol etmeyi unutmayın.');
-      navigate('/login');
+
+      console.log('Register response:', response);
+
+      if (response.status === 201) {
+        navigate('/login', { 
+          state: { message: 'Kayıt başarılı! Lütfen giriş yapın.' } 
+        });
+      }
     } catch (error) {
-      alert(error.response?.data?.error || 'Kayıt olurken bir hata oluştu');
+      console.error('Kayıt hatası:', error);
+      setError(error.response?.data?.message || 'Kayıt sırasında bir hata oluştu');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -64,6 +79,16 @@ const Register = () => {
             onChange={handleChange}
             margin="normal"
             required
+          />
+          <TextField
+            fullWidth
+            label="Kullanıcı Adı"
+            name="username"
+            value={formData.username}
+            onChange={handleChange}
+            margin="normal"
+            required
+            helperText="Benzersiz bir kullanıcı adı seçin"
           />
           <TextField
             fullWidth
@@ -101,10 +126,17 @@ const Register = () => {
             color="primary"
             type="submit"
             sx={{ mt: 2 }}
+            disabled={loading}
           >
-            Kayıt Ol
+            {loading ? 'Kayıt işlemi devam ediyor...' : 'Kayıt Ol'}
           </Button>
         </form>
+
+        {error && (
+          <Typography variant="body2" color="error" sx={{ mt: 2, textAlign: 'center' }}>
+            {error}
+          </Typography>
+        )}
 
         <Box sx={{ mt: 2, textAlign: 'center' }}>
           <Typography variant="body2">

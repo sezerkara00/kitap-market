@@ -10,17 +10,19 @@ import {
   Divider
 } from '@mui/material';
 import { Google as GoogleIcon } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
-import axios from 'axios';
+import axios from '../utils/axiosConfig';
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -31,38 +33,32 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     setError('');
-    
+
     try {
       const response = await axios.post('/api/auth/login', {
         email: formData.email,
         password: formData.password
       });
 
-      if (!response.data.token || !response.data.user) {
-        throw new Error('Sunucudan geçersiz yanıt alındı');
-      }
-      
-      // Token ve kullanıcı bilgilerini kaydet
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      
-      // Axios header'ına token'ı ekle
-      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-      
-      // Event'i tetikle
-      window.dispatchEvent(new Event('userLogin'));
-      
-      // Yönlendirme
-      if (response.data.user.role === 'admin') {
-        navigate('/admin');
-      } else {
+      console.log('Login response:', response);
+
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        
+        // Login event'ini tetikle
+        window.dispatchEvent(new Event('userLogin'));
+        
+        // Ana sayfaya yönlendir
         navigate('/');
       }
-      
     } catch (error) {
-      console.error('Login error:', error);
-      setError(error.response?.data?.error || 'Giriş yapılamadı');
+      console.error('Giriş hatası:', error);
+      setError(error.response?.data?.message || 'Giriş yapılırken bir hata oluştu');
+    } finally {
+      setLoading(false);
     }
   };
 
