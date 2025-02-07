@@ -1373,86 +1373,17 @@ if __name__ == '__main__':
         # Veritabanını sadece ilk kez oluştur
         db.create_all()
         
-        # Admin kullanıcısı yoksa oluştur
+        # Admin kullanıcısı var mı kontrol et
         admin = User.query.filter_by(email='admin@admin.com').first()
         if not admin:
             admin = User(
-                email='admin@admin.com',
-                username='admin',
-                password=generate_password_hash('admin123'),
                 name='Admin',
-                role='admin',
-                balance=0.0,
-                avatar=None
+                email='admin@admin.com',
+                password=generate_password_hash('admin123'),
+                role='admin'
             )
             db.session.add(admin)
-
-            # Örnek yayınevleri ekle
-            publishers = [
-                Publisher(name='Can Yayınları', description='Can Yayınları açıklaması'),
-                Publisher(name='Yapı Kredi Yayınları', description='YKY açıklaması'),
-                Publisher(name='İletişim Yayınları', description='İletişim açıklaması'),
-                Publisher(name='İş Bankası Kültür Yayınları', description='İş Bankası açıklaması'),
-                Publisher(name='Doğan Kitap', description='Doğan Kitap açıklaması'),
-                Publisher(name='Remzi Kitabevi', description='Remzi Kitabevi açıklaması'),
-                Publisher(name='Alfa Yayınları', description='Alfa Yayınları açıklaması'),
-                Publisher(name='Pegasus Yayınları', description='Pegasus Yayınları açıklaması')
-            ]
-            
-            for publisher in publishers:
-                db.session.add(publisher)
-
-            # Örnek kitaplar ekle
-            books = [
-                {
-                    'title': '1984',
-                    'author': 'George Orwell',
-                    'price': 45.0,
-                    'stock': 100,
-                    'description': 'Distopik bir klasik',
-                    'category': 'Roman',
-                    'publisher_id': 1
-                },
-                {
-                    'title': 'Suç ve Ceza',
-                    'author': 'Fyodor Dostoyevski',
-                    'price': 55.0,
-                    'stock': 75,
-                    'description': 'Psikolojik bir başyapıt',
-                    'category': 'Roman',
-                    'publisher_id': 2
-                },
-                {
-                    'title': 'Küçük Prens',
-                    'author': 'Antoine de Saint-Exupéry',
-                    'price': 25.0,
-                    'stock': 150,
-                    'description': 'Her yaştan okuyucu için',
-                    'category': 'Çocuk Kitapları',
-                    'publisher_id': 3
-                },
-                {
-                    'title': 'Nutuk',
-                    'author': 'Mustafa Kemal Atatürk',
-                    'price': 65.0,
-                    'stock': 200,
-                    'description': 'Türkiye Cumhuriyeti\'nin kuruluş öyküsü',
-                    'category': 'Tarih',
-                    'publisher_id': 4
-                }
-            ]
-
-            for book_data in books:
-                book = Book(**book_data)
-                db.session.add(book)
-
-            try:
-                db.session.commit()
-                print("Veritabanı başarıyla oluşturuldu!")
-                print("Admin kullanıcısı ve örnek veriler eklendi!")
-            except Exception as e:
-                db.session.rollback()
-                print("Hata:", str(e))
+            db.session.commit()
         else:
             print("Veritabanı zaten mevcut!")
         
