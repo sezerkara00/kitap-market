@@ -143,13 +143,13 @@ class OrderItem(db.Model):
 # Kullanıcı modeli
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    username = db.Column(db.String(50), unique=True, nullable=False)  # Kullanıcı adı
-    password = db.Column(db.String(200), nullable=True)
-    name = db.Column(db.String(100))  # Ad Soyad
-    google_id = db.Column(db.String(100), unique=True, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    password = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), default='user')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    username = db.Column(db.String(50), unique=True, nullable=False)  # Kullanıcı adı
+    google_id = db.Column(db.String(100), unique=True, nullable=True)
     balance = db.Column(db.Float, default=0.0)
     avatar = db.Column(db.String(200), nullable=True)
 
@@ -1368,12 +1368,13 @@ def delete_review(review_id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
+# Veritabanı başlatma
+def init_db():
     with app.app_context():
-        # Veritabanını sadece ilk kez oluştur
+        # Tabloları oluştur
         db.create_all()
         
-        # Admin kullanıcısı var mı kontrol et
+        # Admin kullanıcısı kontrol et ve oluştur
         admin = User.query.filter_by(email='admin@admin.com').first()
         if not admin:
             admin = User(
@@ -1383,10 +1384,14 @@ if __name__ == '__main__':
                 role='admin'
             )
             db.session.add(admin)
-            db.session.commit()
-        else:
-            print("Veritabanı zaten mevcut!")
-        
-    # Port ayarını Heroku'dan al
+            try:
+                db.session.commit()
+                print("Admin kullanıcısı oluşturuldu!")
+            except Exception as e:
+                db.session.rollback()
+                print("Hata:", str(e))
+
+if __name__ == '__main__':
+    init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
